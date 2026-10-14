@@ -31,6 +31,10 @@ jobs:
         run: python -m pytest -v
       - name: Build Docker Image
         run: docker build -f backend/Dockerfile -t cloudrag-api:ci .
+      - name: Verify Python dependency versions
+        run: |
+          docker run --rm cloudrag-api:ci python -m pip show msgpack setuptools urllib3
+          docker run --rm cloudrag-api:ci python -m pip check
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:

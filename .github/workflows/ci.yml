@@ -1,5 +1,4 @@
-name: CloudRAG CI
-
+﻿name: CloudRAG CI
 on:
 push:
 branches:
@@ -7,10 +6,8 @@ branches:
 pull_request:
 branches:
 - main
-
 permissions:
 contents: read
-
 jobs:
 test-and-build:
 name: Test and Build Docker Image
@@ -19,23 +16,20 @@ runs-on: ubuntu-latest
 steps:
   - name: Checkout Repository
     uses: actions/checkout@v4
-
   - name: Set Up Python
     uses: actions/setup-python@v5
     with:
       python-version: "3.12"
       cache: pip
       cache-dependency-path: backend/requirements.txt
-
   - name: Install Dependencies
-    run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
-
+    run: |
+      python -m pip install --upgrade pip
+      pip install -r backend/requirements.txt
   - name: Run Automated Tests
     run: python -m pytest -v
-
   - name: Build Docker Image
     run: docker build -f backend/Dockerfile -t cloudrag-api:ci .
-
   - name: CI Summary
     if: success()
     run: echo "All tests passed and the Docker image built successfully."

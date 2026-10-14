@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Machine learning models and generated data
+models/
+data/
+*.pt
+*.pth
+*.onnx
+
+# IDE
+.vscode/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Python coverage
+.coverage
+htmlcov/
+
+# Operating system
+.DS_Store
+Thumbs.db

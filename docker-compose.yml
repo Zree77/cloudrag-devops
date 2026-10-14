@@ -1,0 +1,97 @@
+services:
+
+  # -----------------------------------------------
+  # PostgreSQL database with pgvector
+  # -----------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+
+    container_name: cloudrag-postgres
+
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "127.0.0.1:5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - cloudrag-network
+
+  # -----------------------------------------------
+  # CloudRAG FastAPI application
+  # -----------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+
+    container_name: cloudrag-api
+
+    restart: unless-stopped
+
+    environment:
+      APP_NAME: "CloudRAG API"
+      APP_VERSION: "0.2.0"
+
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: qwen3.5:2b
+
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    networks:
+      - cloudrag-network
+
+# -----------------------------------------------
+# Persistent database storage
+# -----------------------------------------------
+volumes:
+  postgres_data:
+
+# -----------------------------------------------
+# Internal application network
+# -----------------------------------------------
+networks:
+  cloudrag-network:
+    driver: bridge

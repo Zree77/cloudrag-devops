@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+python-multipart
+psycopg[binary]
+pgvector
+sentence-transformers
+pypdf
+httpx
+pytest

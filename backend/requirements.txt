@@ -8,3 +8,8 @@ sentence-transformers
 pypdf
 httpx
 pytest
+
+# Security fixes for transitive dependencies
+msgpack>=1.2.1
+setuptools>=78.1.1
+urllib3>=2.8.0

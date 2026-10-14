@@ -1,4 +1,5 @@
 ﻿name: CloudRAG CI
+
 "on":
   push:
     branches:
@@ -6,46 +7,76 @@
   pull_request:
     branches:
       - main
+
 permissions:
   contents: read
+
 jobs:
   test-and-build:
     name: Test and Build Docker Image
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
       - name: Set Up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
+
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
+
       - name: Run Automated Tests
         env:
           POSTGRES_PASSWORD: ci-test-password-not-a-secret
         run: python -m pytest -v
+
       - name: Build Docker Image
         run: docker build -f backend/Dockerfile -t cloudrag-api:ci .
-      - name: Verify Python dependency versions
+
+      - name: Verify Python Dependency Versions
         run: |
           docker run --rm cloudrag-api:ci python -m pip show msgpack setuptools urllib3
           docker run --rm cloudrag-api:ci python -m pip check
-            - name: Diagnose Trivy package detection
+
+      - name: Diagnose Trivy Package Detection
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cloudrag-api:ci
+          format: json
+          output: trivy-report.json
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Print Trivy Findings
+        if: always()
         run: |
-          trivy image --format json --output trivy-report.json cloudrag-api:ci
           python - <<'PY'
           import json
+          import os
 
-          with open("trivy-report.json", encoding="utf-8") as f:
+          path = "trivy-report.json"
+
+          if not os.path.exists(path):
+              print("Trivy report was not generated.")
+              raise SystemExit(0)
+
+          with open(path, encoding="utf-8") as f:
               report = json.load(f)
+
+          findings = 0
 
           for result in report.get("Results", []):
               for vuln in result.get("Vulnerabilities") or []:
+                  findings += 1
                   print(
                       f"Target={result.get('Target')} "
                       f"Package={vuln.get('PkgName')} "
@@ -53,7 +84,11 @@ jobs:
                       f"Fixed={vuln.get('FixedVersion')} "
                       f"ID={vuln.get('VulnerabilityID')}"
                   )
+
+          if findings == 0:
+              print("No HIGH or CRITICAL vulnerabilities were reported.")
           PY
+
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -62,7 +97,8 @@ jobs:
           vuln-type: os,library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: '1'
+          exit-code: "1"
+
       - name: CI Summary
         if: success()
-        run: echo "All tests passed and the Docker image built successfully."
+        run: echo "All tests passed and the Docker image passed the vulnerability scan."

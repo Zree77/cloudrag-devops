@@ -35,6 +35,25 @@ jobs:
         run: |
           docker run --rm cloudrag-api:ci python -m pip show msgpack setuptools urllib3
           docker run --rm cloudrag-api:ci python -m pip check
+            - name: Diagnose Trivy package detection
+        run: |
+          trivy image --format json --output trivy-report.json cloudrag-api:ci
+          python - <<'PY'
+          import json
+
+          with open("trivy-report.json", encoding="utf-8") as f:
+              report = json.load(f)
+
+          for result in report.get("Results", []):
+              for vuln in result.get("Vulnerabilities") or []:
+                  print(
+                      f"Target={result.get('Target')} "
+                      f"Package={vuln.get('PkgName')} "
+                      f"Installed={vuln.get('InstalledVersion')} "
+                      f"Fixed={vuln.get('FixedVersion')} "
+                      f"ID={vuln.get('VulnerabilityID')}"
+                  )
+          PY
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:

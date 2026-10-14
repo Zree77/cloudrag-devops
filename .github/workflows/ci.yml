@@ -45,74 +45,6 @@ jobs:
           docker run --rm cloudrag-api:ci python -m pip show msgpack setuptools urllib3
           docker run --rm cloudrag-api:ci python -m pip check
 
-      - name: Diagnose Trivy Package Detection
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: cloudrag-api:ci
-          format: json
-          output: trivy-report.json
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "0"
-
-      - name: Inspect Trivy Report
-        if: always()
-        run: |
-          python - <<'PY'
-          import json
-          import os
-
-          path = "trivy-report.json"
-
-          if not os.path.exists(path):
-              print("Trivy report was not generated.")
-              raise SystemExit(0)
-
-          with open(path, encoding="utf-8") as f:
-              report = json.load(f)
-
-          print("=== Report Metadata ===")
-          print("Schema version:", report.get("SchemaVersion"))
-          print("Artifact name:", report.get("ArtifactName"))
-          print("Artifact type:", report.get("ArtifactType"))
-
-          print("\n=== Python Package Findings ===")
-
-          for result in report.get("Results", []):
-              print(
-                  "\nTarget:",
-                  result.get("Target"),
-                  "| Type:",
-                  result.get("Type"),
-              )
-
-              for vuln in result.get("Vulnerabilities") or []:
-                  print({
-                      "package": vuln.get("PkgName"),
-                      "installed": vuln.get("InstalledVersion"),
-                      "fixed": vuln.get("FixedVersion"),
-                      "id": vuln.get("VulnerabilityID"),
-                      "primary_url": vuln.get("PrimaryURL"),
-                  })
-
-          print("\n=== Package Metadata ===")
-
-          for result in report.get("Results", []):
-              for package in result.get("Packages") or []:
-                  name = package.get("Name", "")
-                  if name.lower() in {
-                      "msgpack",
-                      "setuptools",
-                      "urllib3",
-                  }:
-                      print({
-                          "name": name,
-                          "version": package.get("Version"),
-                          "path": package.get("FilePath"),
-                      })
-          PY
-
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -122,6 +54,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          scanners: vuln
 
       - name: CI Summary
         if: success()

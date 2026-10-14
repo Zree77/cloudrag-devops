@@ -16,7 +16,6 @@ test-and-build:
 name: Test and Build Docker Image
 runs-on: ubuntu-latest
 
-```
 steps:
   - name: Checkout Repository
     uses: actions/checkout@v4

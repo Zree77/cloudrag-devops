@@ -29,24 +29,14 @@ steps:
       cache-dependency-path: backend/requirements.txt
 
   - name: Install Dependencies
-    run: |
-      python -m pip install --upgrade pip
-      pip install -r backend/requirements.txt
+    run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
 
   - name: Run Automated Tests
-    run: |
-      python -m pytest -v
+    run: python -m pytest -v
 
   - name: Build Docker Image
-    run: |
-      docker build \
-        -f backend/Dockerfile \
-        -t cloudrag-api:ci \
-        .
+    run: docker build -f backend/Dockerfile -t cloudrag-api:ci .
 
   - name: CI Summary
     if: success()
-    run: |
-      echo "All automated tests passed."
-      echo "Docker image built successfully."
-```
+    run: echo "All tests passed and the Docker image built successfully."

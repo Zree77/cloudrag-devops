@@ -1,4 +1,4 @@
-# CloudRAG — Cloud-Native Retrieval-Augmented Generation Platform
+# CloudRAG - Cloud-Native Retrieval-Augmented Generation Platform
 
 CloudRAG is a cloud-hosted Retrieval-Augmented Generation (RAG) application that allows users to interact with documents through natural-language questions.
 
@@ -132,6 +132,32 @@ The deployed application has been verified using the following endpoints.
 
 The `/chat/ask` endpoint was tested successfully against the deployed application.
 
+## Screenshots and Deployment Evidence
+The following screenshots document the CloudRAG CI/CD pipeline, AWS deployment, monitoring, API health checks, and Terraform validation.
+### GitHub Actions CI/CD
+| Screenshot | Description |
+|---|---|
+| ![GitHub Actions Success](docs/screenshots/github-actions-success.png) | Successful end-to-end CI/CD workflow |
+| ![Test Build and Scan](docs/screenshots/github-actions-test-build.png) | Automated testing, Docker build, dependency verification, and Trivy security scanning |
+| ![ECS Deployment Pipeline](docs/screenshots/github-actions-ecs-deploy.png) | AWS OIDC authentication, ECR image publishing, and ECS deployment verification |
+### AWS ECS Deployment
+![ECS Deployment Success](docs/screenshots/ecs-deployment-success.png)
+The ECS service was verified as active, with one running task and a successful deployment.
+### CloudWatch Monitoring
+![CloudWatch Dashboard](docs/screenshots/cloudwatch-dashboard.png)
+The CloudWatch dashboard displays ECS CPU utilization, memory utilization, and alarm status.
+![CloudWatch Alarms](docs/screenshots/cloudwatch-alarms-ok.png)
+Both CPU and memory utilization alarms were configured with an 80% threshold and SNS alarm notifications. Both alarms were in the `OK` state during verification.
+### API Health and Readiness
+![API Health Checks](docs/screenshots/api-health-checks.png)
+The deployed API was verified through AWS Systems Manager port forwarding:
+- `/health` returned a healthy application status.
+- `/ready` confirmed that the application was ready and the database was connected.
+### Terraform Verification
+![Terraform Validation](docs/screenshots/terraform-validate.png)
+Terraform configuration validation completed successfully.
+![Terraform Plan](docs/screenshots/terraform-plan.png)
+The reviewed Terraform plan proposed zero additions, one in-place change, and zero deletions. The plan was reviewed but not applied.
 ## Security Practices
 
 - GitHub Actions authenticates to AWS using OpenID Connect (OIDC), avoiding long-lived AWS access keys in GitHub.
@@ -251,7 +277,7 @@ These checks verify that the deployed API, database connection, and RAG question
 
 ## Future Improvements
 
-- Add CloudWatch alarms for ECS task failures and resource utilization.
+- Add alerts for ECS task failures and application-level errors.
 - Improve application-level logging and error monitoring.
 - Add API authentication and request-rate limiting where appropriate.
 - Add automated rollback and deployment notifications.

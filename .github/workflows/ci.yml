@@ -1,4 +1,4 @@
-﻿name: CloudRAG CI
+﻿name: CloudRAG CI/CD
 
 "on":
   push:
@@ -10,10 +10,18 @@
 
 permissions:
   contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+  ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+  CONTAINER_NAME: cloudrag-api
 
 jobs:
   test-and-build:
-    name: Test and Build Docker Image
+    name: Test, Build and Scan
     runs-on: ubuntu-latest
 
     steps:
@@ -40,7 +48,7 @@ jobs:
       - name: Build Docker Image
         run: docker build -f backend/Dockerfile -t cloudrag-api:ci .
 
-      - name: Verify Python Dependency Versions
+      - name: Verify Python Dependencies
         run: |
           docker run --rm cloudrag-api:ci python -m pip show msgpack setuptools urllib3
           docker run --rm cloudrag-api:ci python -m pip check
@@ -59,4 +67,154 @@ jobs:
 
       - name: CI Summary
         if: success()
-        run: echo "All tests passed and the Docker image passed the vulnerability scan."
+        run: echo "Tests passed, Docker build succeeded, and the configured Trivy scan passed."
+
+  deploy:
+    name: Deploy to Amazon ECS
+    runs-on: ubuntu-latest
+    needs: test-and-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::658469473117:role/cloudrag-github-actions-deploy-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS Identity
+        run: aws sts get-caller-identity
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Docker Image
+        id: image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+          docker build \
+            -f backend/Dockerfile \
+            -t "$IMAGE_URI" \
+            .
+
+          docker push "$IMAGE_URI"
+
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Download Current ECS Task Definition
+        run: |
+          CURRENT_TASK_DEFINITION=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+
+          echo "Using current task definition: $CURRENT_TASK_DEFINITION"
+
+          aws ecs describe-task-definition \
+            --task-definition "$CURRENT_TASK_DEFINITION" \
+            --query taskDefinition \
+            --output json > task-definition.json
+
+      - name: Prepare Updated Task Definition
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          with open("task-definition.json", encoding="utf-8") as file:
+              task = json.load(file)
+
+          removable = [
+              "taskDefinitionArn",
+              "revision",
+              "status",
+              "requiresAttributes",
+              "compatibilities",
+              "registeredAt",
+              "registeredBy",
+              "deregisteredAt",
+          ]
+
+          for key in removable:
+              task.pop(key, None)
+
+          container_name = os.environ["CONTAINER_NAME"]
+          image_uri = os.environ["IMAGE_URI"]
+
+          containers = task.get("containerDefinitions", [])
+          matches = [c for c in containers if c.get("name") == container_name]
+
+          if len(matches) != 1:
+              raise SystemExit(
+                  f"Expected exactly one container named {container_name!r}; "
+                  f"found {len(matches)}."
+              )
+
+          matches[0]["image"] = image_uri
+
+          with open("task-definition-updated.json", "w", encoding="utf-8") as file:
+              json.dump(task, file, indent=2)
+
+          print(f"Prepared task definition with image: {image_uri}")
+          PY
+
+      - name: Register Updated Task Definition
+        id: task-def
+        run: |
+          TASK_DEFINITION_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://task-definition-updated.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "task_definition_arn=$TASK_DEFINITION_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "${{ steps.task-def.outputs.task_definition_arn }}"
+
+      - name: Wait for ECS Service Stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+      - name: Verify Deployment
+        run: |
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].{Status:status,Desired:desiredCount,Running:runningCount,Pending:pendingCount,TaskDefinition:taskDefinition}' \
+            --output table
+
+          RUNNING=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].runningCount' \
+            --output text)
+
+          DESIRED=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].desiredCount' \
+            --output text)
+
+          if [ "$RUNNING" != "$DESIRED" ]; then
+            echo "Deployment verification failed: running=$RUNNING desired=$DESIRED"
+            exit 1
+          fi
+
+          echo "ECS deployment completed successfully."

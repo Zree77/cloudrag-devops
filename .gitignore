@@ -37,4 +37,39 @@ htmlcov/
 
 # Operating system
 .DS_Store
-Thumbs.db
+Thumbs.db# Terraform working files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+# Local AWS task-definition and diagnostic files
+cloudrag-task-definition-*.json
+task-definition*.json
+ollama-*.json
+ollama-*.sh
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local GitHub Actions AWS setup artifacts
+github-actions-deploy-policy.json
+github-actions-trust-policy.json
+# Terraform local state, plans, and provider cache
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+
+# Local Terraform IAM policy artifacts
+terraform/ssm-trust-policy.json
+
+# GitHub Actions AWS setup artifacts
+github-actions-deploy-policy.json
+github-actions-trust-policy.json
